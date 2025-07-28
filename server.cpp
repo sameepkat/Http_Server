@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <bits/types/struct_timeval.h>
 #include <cerrno>
 #include <cstddef>
@@ -13,8 +14,13 @@
 #include <cstring>
 #include <vector>
 #include <fcntl.h>
+#include <poll.h>
 
 int main(){
+
+    std::vector<pollfd> poll_fds;
+    std::vector<int> client_sockets;
+
     // Creating the socket
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -32,13 +38,13 @@ int main(){
     }
 
     // creating the server address
-    sockaddr_in server_address{};
-    server_address.sin_family = AF_INET;
-    server_address.sin_port = htons(8000);
-    server_address.sin_addr.s_addr = INADDR_ANY;
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(8000);
+    address.sin_addr.s_addr = INADDR_ANY;
 
     // Binding to that sockaddr
-    if(bind(socket_fd, (sockaddr*)&server_address, sizeof(server_address)) == -1){
+    if(bind(socket_fd, (sockaddr*)&address, sizeof(address)) == -1){
         std::cerr << "failed to bind to server"<< strerror(errno)  << std::endl;
     close(socket_fd);
     }
@@ -58,25 +64,14 @@ int main(){
         return -1;
     }
 
-    std::vector<int> client_sockets;
-    int max_sd = socket_fd;
+    pollfd server_poll_fd;
+    server_poll_fd.fd = socket_fd;
+    server_poll_fd.events = POLLIN;
+    poll_fds.push_back(server_poll_fd);
+
 
     while(true) {
-        fd_set readfds;
-        FD_ZERO(&readfds);
-        FD_SET(socket_fd, &readfds);
-        
-
-        for(int client_sd: client_sockets){
-            FD_SET(client_sd, &readfds);
-            max_sd = std::max(max_sd, client_sd);
-        }
-
-        timeval timeout;
-        timeout.tv_sec = 5 ;
-        timeout.tv_usec = 0;
-
-        int activity = select(max_sd + 1, &readfds, NULL, NULL, &timeout);
+        int activity = poll(poll_fds.data(), poll_fds.size(), -1); // -1 means indefinite timeout
 
         if((activity < 0 ) && (errno != EINTR)){
             perror("select error");
@@ -85,17 +80,18 @@ int main(){
 
         // Incoming connection on the server socket
         int new_socket;
-        socklen_t addrlen = sizeof(server_address);
+        socklen_t addrlen = sizeof(address);
         char buffer[1024] = {0};
 
-        
-        if(FD_ISSET(socket_fd, &readfds)){
+
+        if(poll_fds[0].revents & POLLIN){
             // Why server_address instead of client_address
-            if((new_socket = accept(socket_fd, (sockaddr *)&server_address, &addrlen)) < 0) {
-                perror("accept");
-                break;
+
+            if((new_socket = accept(socket_fd, (sockaddr *)&address, &addrlen)) < 0) {
+                perror("accept failed");
+                continue;
             }
-            std::cout << "New connection, socket fd is " << new_socket << " , ip is : " << inet_ntoa(server_address.sin_addr) << ", port : " << ntohs(server_address.sin_port) << std::endl;
+            std::cout << "New connection, socket fd is " << new_socket << " , ip is : " << inet_ntoa(address.sin_addr) << ", port : " << ntohs(address.sin_port) << std::endl;
 
             flags = fcntl(new_socket, F_GETFL, 0);
             if(fcntl(new_socket, F_SETFL, flags | O_NONBLOCK) < 0){
@@ -104,46 +100,52 @@ int main(){
                 continue;
             }
 
+
+            pollfd new_poll_fd;
+            new_poll_fd.fd = new_socket;
+            new_poll_fd.events = POLLIN;
+            poll_fds.push_back(new_poll_fd);
             // Add new socket to the list of sockets
             client_sockets.push_back(new_socket);
         }
-            // Handle data from client sockets
-            for(auto it = client_sockets.begin(); it != client_sockets.end();) {
-                int sd = *it;
-                if(FD_ISSET(sd, &readfds)){
-                    ssize_t bytes_received = read(sd, buffer, 1024);
-                    if(bytes_received < 0){
-                        // No data received yet, try again later
-                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                          ++it;
-                          continue;
-                        }else{
-                            perror("read failed");
-                            close(sd);
-                            it = client_sockets.erase(it);
-                            continue;
-                        }
-
-                    }
-                    else if(bytes_received == 0){
-                        // Somebody disconnected, get his retails and print
-                        // getpeername(sd, (sockaddr *)&server_address, &addrlen);
-                        std::cout << "Host disconnected, ip " << inet_ntoa(server_address.sin_addr) << " , port " << ntohs(server_address.sin_port) << std::endl;
-
-                        // Close the socket and remove from list
-                        close(sd);
-                        it = client_sockets.erase(it);
+        std::cout << "New connection, socket fd is " << new_socket << std::endl;
+            // Check for activity on other sockets
+        for(size_t i=1; i< poll_fds.size(); ++i) {
+            if(poll_fds[i].revents & POLLIN){
+                int sd = poll_fds[i].fd;
+                ssize_t bytes_received = read(sd, buffer, 1024);
+                if(bytes_received < 0){
+                    // No data received yet, try again later
+                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
                         continue;
-                    }else {
-                        // Echo back the messaeg that came in
-                        buffer[bytes_received] = '\0';
-                        std::cout << buffer << std::endl;
-                        send(sd, buffer, strlen(buffer), 0);
-                        it++;
+                    }else{
+                        perror("read failed");
+                        close(sd);
+                        poll_fds.erase(poll_fds.begin() + i);
+                        auto it = std::remove(client_sockets.begin(), client_sockets.end(), sd);
+                        client_sockets.erase(it, client_sockets.end());
+                        --i;
+                        continue;
                     }
-                }else{
-                    it++;
+
                 }
+                else if(bytes_received == 0){
+                    // Somebody disconnected, get his retails and print
+                    // getpeername(sd, (sockaddr *)&address, &addrlen);
+                    std::cout << "Host disconnected, ip " << inet_ntoa(address.sin_addr) << " , port " << ntohs(address.sin_port) << std::endl;
+
+                    // Close the socket and remove from list
+                    close(sd);
+                    poll_fds.erase(poll_fds.begin() + i);
+                    client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), sd), client_sockets.end());
+                    continue;
+                }else {
+                    // Echo back the messaeg that came in
+                    buffer[bytes_received] = '\0';
+                    std::cout << buffer << std::endl;
+                    send(sd, buffer, strlen(buffer), 0);
+                }
+            }
             }
         }
 
