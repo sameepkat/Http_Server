@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <iostream>
+#include <string>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <string.h>
@@ -15,6 +16,48 @@
 #include <vector>
 #include <fcntl.h>
 #include <poll.h>
+#include <vector>
+#include <unordered_map>
+#include <sstream>
+#include <algorithm>
+
+std::unordered_map<std::string, std::vector<std::string>> headerParser(const std::string& request){
+    std::unordered_map<std::string, std::vector<std::string>> headers;
+    std::stringstream requestStream(request);
+    std::string line;
+
+    // Skip the request line (e.g., "GET /HTTP/1.1")
+    std::getline(requestStream, line);
+
+    // Read headers until an empty line is encountered
+    while(std::getline(requestStream, line) && !line.empty() && line != "\r"){
+        if(!line.empty() && line.back() == '\r'){
+            line.pop_back();
+        }
+
+        size_t colonPos = line.find(':');
+        if (colonPos != std::string::npos) {
+            std::string name = line.substr(0, colonPos);
+            std::string value = line.substr(colonPos + 1);
+
+            // Trim leading/ trailing whitespace from name
+            size_t start = name.find_first_not_of(" \t");
+            name = (start == std::string::npos) ? "" : name.substr(start);
+            size_t end = name.find_last_not_of(" \t");
+            name = (end == std::string::npos) ? "" : name.substr(0, end+1);
+
+            // Trim leading/ trailing whitespace from value
+            start = value.find_first_not_of(" \t");
+            value = (start == std::string::npos) ? "" : value.substr(start);
+            end = value.find_last_not_of(" \t");
+            value = (end == std::string::npos) ? "" : value.substr(0, end+1);
+
+            headers[name].push_back(value);
+        }
+    }
+
+    return headers;
+}
 
 int main(){
 
@@ -28,7 +71,7 @@ int main(){
         std::cerr << "failed to connet to socket." << strerror(errno) << std::endl;
     }
 
-    std::cout << "Socket created with fd = " << socket_fd << std::endl;
+    // std::cout << "Socket created with fd = " << socket_fd << std::endl;
 
     int reuse = 1;
     if(setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == -1){
@@ -40,7 +83,7 @@ int main(){
     // creating the server address
     sockaddr_in address{};
     address.sin_family = AF_INET;
-    address.sin_port = htons(8000);
+    address.sin_port = htons(8080);
     address.sin_addr.s_addr = INADDR_ANY;
 
     // Binding to that sockaddr
@@ -49,7 +92,7 @@ int main(){
     close(socket_fd);
     }
 
-    std::cout << "Socket bound to port 8000" << std::endl;
+    // std::cout << "Socket bound to port 8080" << std::endl;
 
     if(listen(socket_fd, 10) == -1){
         std::cerr << "Error listening to requests " << strerror(errno) << std::endl;
@@ -91,7 +134,7 @@ int main(){
                 perror("accept failed");
                 continue;
             }
-            std::cout << "New connection, socket fd is " << new_socket << " , ip is : " << inet_ntoa(address.sin_addr) << ", port : " << ntohs(address.sin_port) << std::endl;
+            // std::cout << "New connection, socket fd is " << new_socket << " , ip is : " << inet_ntoa(address.sin_addr) << ", port : " << ntohs(address.sin_port) << std::endl;
 
             flags = fcntl(new_socket, F_GETFL, 0);
             if(fcntl(new_socket, F_SETFL, flags | O_NONBLOCK) < 0){
@@ -108,7 +151,7 @@ int main(){
             // Add new socket to the list of sockets
             client_sockets.push_back(new_socket);
         }
-        std::cout << "New connection, socket fd is " << new_socket << std::endl;
+        // std::cout << "New connection, socket fd is " << new_socket << std::endl;
             // Check for activity on other sockets
         for(size_t i=1; i< poll_fds.size(); ++i) {
             if(poll_fds[i].revents & POLLIN){
@@ -132,7 +175,7 @@ int main(){
                 else if(bytes_received == 0){
                     // Somebody disconnected, get his retails and print
                     // getpeername(sd, (sockaddr *)&address, &addrlen);
-                    std::cout << "Host disconnected, ip " << inet_ntoa(address.sin_addr) << " , port " << ntohs(address.sin_port) << std::endl;
+                     // std::cout << "Host disconnected, ip " << inet_ntoa(address.sin_addr) << " , port " << ntohs(address.sin_port) << std::endl;
 
                     // Close the socket and remove from list
                     close(sd);
@@ -143,7 +186,24 @@ int main(){
                     // Echo back the messaeg that came in
                     buffer[bytes_received] = '\0';
                     std::cout << buffer << std::endl;
-                    send(sd, buffer, strlen(buffer), 0);
+                    std::unordered_map<std::string, std::vector<std::string>> parsedData = headerParser(buffer);
+                    for(const auto& pair: parsedData) {
+                        std::cout << pair.first << " = ";
+
+                        for(const auto& value: pair.second) {
+                            std::cout << value << " ";
+                        }
+                        std::cout << std::endl;
+                    }
+
+                    std::string body = "Hello, World!";
+                    std::string response = "HTTP/1.1 200 OK\r\n";
+                    response += "Content-Type: text/plain\r\n";
+                    response +="Content-Length: " + std::to_string(body.size()) + "\r\n";
+                    response += "\r\n";
+                    response += body;
+
+                    send(sd, response.c_str(), response.size(), 0);
                 }
             }
             }
@@ -154,5 +214,6 @@ int main(){
             close(client_sd);
         }
     close(socket_fd);
+    poll_fds.erase(poll_fds.begin() +1);
     return 0;
 }
