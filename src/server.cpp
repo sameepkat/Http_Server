@@ -98,8 +98,8 @@ int main(){
             // Add new socket to the list of sockets
             client_sockets.push_back(new_socket);
         }
-        // std::cout << "New connection, socket fd is " << new_socket << std::endl;
-            // Check for activity on other sockets
+
+        // Check for activity on other sockets
         for(size_t i=1; i< poll_fds.size(); ++i) {
             if(poll_fds[i].revents & POLLIN){
                 int sd = poll_fds[i].fd;
@@ -130,10 +130,9 @@ int main(){
                     client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), sd), client_sockets.end());
                     continue;
                 }else {
-                    // Echo back the messaeg that came in
                     buffer[bytes_received] = '\0';
                     std::cout << buffer << std::endl;
-                    std::unordered_map<std::string, std::vector<std::string>> parsedData = headerParser(buffer);
+                    std::unordered_map<std::string, std::vector<std::string>> parsedData = headerParser(buffer, sd);
                     for(const auto& pair: parsedData) {
                         std::cout << pair.first << " = ";
 
@@ -143,14 +142,6 @@ int main(){
                         std::cout << std::endl;
                     }
 
-                    std::string body = "Hello, World!";
-                    std::string response = "HTTP/1.1 200 OK\r\n";
-                    response += "Content-Type: text/plain\r\n";
-                    response +="Content-Length: " + std::to_string(body.size()) + "\r\n";
-                    response += "\r\n";
-                    response += body;
-
-                    send(sd, response.c_str(), response.size(), 0);
                 }
             }
             }

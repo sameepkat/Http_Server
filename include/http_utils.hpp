@@ -6,6 +6,6 @@
 #include <unistd.h>
 #include <unordered_map>
 
-std::unordered_map<std::string, std::vector<std::string>> headerParser(const std::string& request);
+std::unordered_map<std::string, std::vector<std::string>> headerParser(const std::string& request, const int sd);
 
 #endif
