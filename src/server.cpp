@@ -1,63 +1,12 @@
-#include <algorithm>
-#include <bits/types/struct_timeval.h>
-#include <cerrno>
-#include <cstddef>
-#include <cstdio>
-#include <iostream>
-#include <string>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <string.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/select.h>
-#include <sys/types.h>
+#include "../include/http_utils.hpp"
 #include <cstring>
-#include <vector>
-#include <fcntl.h>
 #include <poll.h>
-#include <vector>
-#include <unordered_map>
-#include <sstream>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+#include <fcntl.h>
 #include <algorithm>
 
-std::unordered_map<std::string, std::vector<std::string>> headerParser(const std::string& request){
-    std::unordered_map<std::string, std::vector<std::string>> headers;
-    std::stringstream requestStream(request);
-    std::string line;
-
-    // Skip the request line (e.g., "GET /HTTP/1.1")
-    std::getline(requestStream, line);
-
-    // Read headers until an empty line is encountered
-    while(std::getline(requestStream, line) && !line.empty() && line != "\r"){
-        if(!line.empty() && line.back() == '\r'){
-            line.pop_back();
-        }
-
-        size_t colonPos = line.find(':');
-        if (colonPos != std::string::npos) {
-            std::string name = line.substr(0, colonPos);
-            std::string value = line.substr(colonPos + 1);
-
-            // Trim leading/ trailing whitespace from name
-            size_t start = name.find_first_not_of(" \t");
-            name = (start == std::string::npos) ? "" : name.substr(start);
-            size_t end = name.find_last_not_of(" \t");
-            name = (end == std::string::npos) ? "" : name.substr(0, end+1);
-
-            // Trim leading/ trailing whitespace from value
-            start = value.find_first_not_of(" \t");
-            value = (start == std::string::npos) ? "" : value.substr(start);
-            end = value.find_last_not_of(" \t");
-            value = (end == std::string::npos) ? "" : value.substr(0, end+1);
-
-            headers[name].push_back(value);
-        }
-    }
-
-    return headers;
-}
 
 int main(){
 
@@ -65,18 +14,16 @@ int main(){
     std::vector<int> client_sockets;
 
     // Creating the socket
-    int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
-    if (socket_fd == -1){
+    if (server_fd == -1){
         std::cerr << "failed to connet to socket." << strerror(errno) << std::endl;
     }
 
-    // std::cout << "Socket created with fd = " << socket_fd << std::endl;
-
     int reuse = 1;
-    if(setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == -1){
+    if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == -1){
         std::cerr << "Error setting SO_REUSEADDR: " << strerror(errno) << std::endl;
-        close(socket_fd);
+        close(server_fd);
         return 1;
     }
 
@@ -87,28 +34,28 @@ int main(){
     address.sin_addr.s_addr = INADDR_ANY;
 
     // Binding to that sockaddr
-    if(bind(socket_fd, (sockaddr*)&address, sizeof(address)) == -1){
+    if(bind(server_fd, (sockaddr*)&address, sizeof(address)) == -1){
         std::cerr << "failed to bind to server"<< strerror(errno)  << std::endl;
-    close(socket_fd);
+    close(server_fd);
     }
 
     // std::cout << "Socket bound to port 8080" << std::endl;
 
-    if(listen(socket_fd, 10) == -1){
+    if(listen(server_fd, 10) == -1){
         std::cerr << "Error listening to requests " << strerror(errno) << std::endl;
-        close(socket_fd);
+        close(server_fd);
         return 1;
     }
 
     // Set the server socket to non-blockign mode
-    int flags = fcntl(socket_fd, F_GETFL, 0);
-    if(fcntl(socket_fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+    int flags = fcntl(server_fd, F_GETFL, 0);
+    if(fcntl(server_fd, F_SETFL, flags | O_NONBLOCK) < 0) {
         perror("fcntl failed");
         return -1;
     }
 
     pollfd server_poll_fd;
-    server_poll_fd.fd = socket_fd;
+    server_poll_fd.fd = server_fd;
     server_poll_fd.events = POLLIN;
     poll_fds.push_back(server_poll_fd);
 
@@ -130,7 +77,7 @@ int main(){
         if(poll_fds[0].revents & POLLIN){
             // Why server_address instead of client_address
 
-            if((new_socket = accept(socket_fd, (sockaddr *)&address, &addrlen)) < 0) {
+            if((new_socket = accept(server_fd, (sockaddr *)&address, &addrlen)) < 0) {
                 perror("accept failed");
                 continue;
             }
@@ -213,7 +160,7 @@ int main(){
         for(int client_sd: client_sockets){
             close(client_sd);
         }
-    close(socket_fd);
+    close(server_fd);
     poll_fds.erase(poll_fds.begin() +1);
     return 0;
 }

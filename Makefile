@@ -1,6 +1,6 @@
 CC = g++
 CFLAGS = -Wall -Werror -std=c++20
-SOURCES = server.cpp 
+SOURCES = src/server.cpp src/http_utils.cpp
 OBJECTS = $(SOURCES:.c=.o)
 EXECUTABLE = server
 
