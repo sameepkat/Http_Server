@@ -2,10 +2,9 @@
 #define HTTP_UTILS
 
 #include <string>
-#include <vector>
 #include <unistd.h>
-#include <unordered_map>
+#include "../include/http_types.hpp"
 
-std::unordered_map<std::string, std::vector<std::string>> headerParser(const std::string& request, const int sd);
+Request headerParser(const std::string& request);
 
 #endif

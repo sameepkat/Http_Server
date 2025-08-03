@@ -1,10 +1,4 @@
 #pragma once
-#include <string>
+#include "../include/http_types.hpp"
 
-struct Request{
-    std::string method;
-    std::string path;
-    std::string version;
-} ;
-
-std::string request_handler(const Request& req, const int sd);
+Response request_handler(const Request& req);

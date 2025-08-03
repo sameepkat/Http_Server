@@ -1,10 +1,12 @@
 #include "../include/http_utils.hpp"
+#include "../include/request_handler.hpp"
 #include <cstring>
 #include <poll.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <iostream>
 #include <fcntl.h>
+#include <vector>
 #include <algorithm>
 
 
@@ -132,16 +134,10 @@ int main(){
                 }else {
                     buffer[bytes_received] = '\0';
                     std::cout << buffer << std::endl;
-                    std::unordered_map<std::string, std::vector<std::string>> parsedData = headerParser(buffer, sd);
-                    for(const auto& pair: parsedData) {
-                        std::cout << pair.first << " = ";
-
-                        for(const auto& value: pair.second) {
-                            std::cout << value << " ";
-                        }
-                        std::cout << std::endl;
-                    }
-
+                    Request parsedHeader = headerParser(buffer);
+                    Response response = request_handler(parsedHeader);
+                    std::string response_str = response.to_string();
+                    send(sd, response_str.c_str(), response_str.size(), 0);
                 }
             }
             }
