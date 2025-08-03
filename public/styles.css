@@ -1,0 +1,9 @@
+body{
+    padding: 20px;
+    background-color: red;
+}
+
+h1{
+    border: 1;
+    background-color: blue;
+}
