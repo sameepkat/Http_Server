@@ -1,5 +1,6 @@
 #include "../include/http_utils.hpp"
 #include "../include/request_handler.hpp"
+#include "../include/route_handler.hpp"
 #include <cstring>
 #include <poll.h>
 #include <arpa/inet.h>
@@ -135,7 +136,7 @@ int main(){
                     buffer[bytes_received] = '\0';
                     std::cout << buffer << std::endl;
                     Request parsedHeader = headerParser(buffer);
-                    Response response = request_handler(parsedHeader);
+                    Response response = route_handler(parsedHeader);
                     std::string response_str = response.to_string();
                     send(sd, response_str.c_str(), response_str.size(), 0);
                 }

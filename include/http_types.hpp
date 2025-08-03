@@ -2,6 +2,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <sstream>
 
 struct Request{
     std::string method;
@@ -20,13 +21,14 @@ struct Response{
     std::string body;
 
     std::string to_string() const {
-        std::string res = version + " " + std::to_string(status_code) + " " + reason + "\r\n";
+        std::ostringstream oss;
+        oss << version << " " << std::to_string(status_code) << " " << reason << "\r\n";
         for (const auto& [key, values] : headers) {
            for(const auto& value: values) {
-               res += key + ": " + value + "\r\n";
+               oss << key << ": " << value << "\r\n";
            }
         }
-        res += "\r\n" + body;
-        return res;
+        oss << "\r\n" << body;
+        return oss.str();
     }
 };

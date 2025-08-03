@@ -1,36 +1,47 @@
 #include "../include/request_handler.hpp"
+#include <string>
 #include <sys/socket.h>
 #include <vector>
 
-Response request_handler(const Request &req){
-    Response res;
-    std::string body;
-    if(req.method == "GET"){
-        body = "Handling GET Request\n";
-    }else{
-        body+= "Sorry. That method is not allowed as of now";
-    }
-    body += "The requested path is: " + req.path;
-
-    // std::string response = "HTTP/1.1 200 OK\r\n";
-    // response += "Content-Type: text/plain\r\n";
-    // response +="Content-Length: " + std::to_string(body.size()) + "\r\n";
-    // response += "\r\n";
-    // response += body;
-
-    std::unordered_map<std::string, std::vector<std::string>> headers = {
-        {"Content-Type", {"text/plain"}},
-        {"Content-Length", {std::to_string(body.size())}}
-    };
-
-
-    res = {
+Response handle_root(const Request& req){
+    std::string body = "Welcome to the root path";
+    return Response {
         "HTTP/1.1",
         200,
         "OK",
-        headers,
-        body,
+        {{
+                "Content-Type", {"text/plain"}},
+         {"Content-Length", {std::to_string(body.size())}}},
+        body
     };
+}
 
-    return res;
+Response handle_health(const Request& req){
+    std::string body = R"({"health": "ok"})";
+
+  return Response{
+      "HTTP/1.1",
+      200,
+      "OK",
+      {
+          {"Content-Type", {"application/json"}},
+          {"Content-Length", {std::to_string(body.size())}}
+      },
+      body
+  };
+}
+
+Response handle_404(const Request& req){
+  std::string body = "Not Found";
+
+  return Response{
+      "HTTP/1.1",
+      400,
+      "Not Found",
+      {
+          {"Content-Type", {"text/plain"}},
+          {"Content-Length", {std::to_string(body.size())}}
+      },
+      body
+  };
 }
