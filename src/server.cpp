@@ -1,5 +1,4 @@
 #include "../include/http_utils.hpp"
-#include "../include/request_handler.hpp"
 #include "../include/route_handler.hpp"
 #include <cstring>
 #include <poll.h>

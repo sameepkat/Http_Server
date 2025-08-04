@@ -1,7 +1,6 @@
 #include "../include/request_handler.hpp"
 #include <string>
 #include <sys/socket.h>
-#include <vector>
 
 Response handle_root(const Request& req){
     std::string body = "Welcome to the root path";
